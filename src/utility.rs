@@ -151,6 +151,24 @@ impl EnglishScore {
     }
 }
 
+pub fn pkcs7_padding(input: &[u8], block_size: usize) -> Result<Vec<u8>, &'static str> {
+    if block_size > 256 {
+        return Err("pkcs7 only valid for block sizes <= 256");
+    }
+
+    let mut ret_vec: Vec<u8> = Vec::from(input);
+
+    let cur_len = input.len();
+    let padding_size = block_size - (cur_len % block_size);
+    let mut padding_bytes: Vec<u8> = (0..padding_size)
+        .into_iter()
+        .map(|_| padding_size as u8)
+        .collect();
+    ret_vec.append(&mut padding_bytes);
+
+    Ok(ret_vec)
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -234,6 +252,23 @@ mod tests {
         assert_eq!(distance_gen, 37);
         let distance_gen = hamming_distance(&left_bytes, &right_bytes).unwrap();
         assert_eq!(distance_gen, 37);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_pkcs7_padding() -> Result<(), &'static str> {
+        let input = b"YELLOW SUBMARINE";
+        let output = b"YELLOW SUBMARINE\x04\x04\x04\x04";
+
+        let test_result = pkcs7_padding(input, 20).unwrap();
+        assert_eq!(test_result, output);
+
+        let output =
+            b"YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10";
+
+        let test_result = pkcs7_padding(input, 16).unwrap();
+        assert_eq!(test_result, output);
 
         Ok(())
     }
