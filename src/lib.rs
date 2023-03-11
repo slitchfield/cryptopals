@@ -437,7 +437,7 @@ mod tests {
             score: f32,
         }
        
-        let target_path = Path::new("/home/sl/projects/rust/cryptopals/4.txt");
+        let target_path = Path::new("/home/sl/projects/rust/cryptopals/inputs/set1/4.txt");
         let _display = target_path.display();
 
         let file = match File::open(&target_path) {
@@ -510,7 +510,7 @@ mod tests {
         use std::io::BufRead;
         use std::path::Path;
        
-        let target_path = Path::new("/home/sl/projects/rust/cryptopals/6.txt");
+        let target_path = Path::new("/home/sl/projects/rust/cryptopals/inputs/set1/6.txt");
         let _display = target_path.display();
         let file = match File::open(&target_path) {
             Err(_why) => { assert!(false); return Err("Could not open file"); },
@@ -579,7 +579,7 @@ mod tests {
         use std::io::BufRead;
         use std::path::Path;
        
-        let target_path = Path::new("/home/sl/projects/rust/cryptopals/7.txt");
+        let target_path = Path::new("/home/sl/projects/rust/cryptopals/inputs/set1/7.txt");
         let _display = target_path.display();
         let file = match File::open(&target_path) {
             Err(_why) => { assert!(false); return Err("Could not open file"); },
@@ -622,7 +622,7 @@ mod tests {
         use std::io::BufRead;
         use std::path::Path;
        
-        let target_path = Path::new("/home/sl/projects/rust/cryptopals/8.txt");
+        let target_path = Path::new("/home/sl/projects/rust/cryptopals/inputs/set1/8.txt");
         let _display = target_path.display();
         let file = match File::open(&target_path) {
             Err(_why) => { assert!(false); return Err("Could not open file"); },
