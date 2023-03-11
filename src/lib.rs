@@ -3,27 +3,7 @@ use base64;
 
 pub mod conversions;
 
-pub fn fixed_xor(left: &Vec<u8>, right: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
-
-    if left.len() != right.len() {
-        return Err("fixed_xor: vectors must be the same length");
-    }
-
-    Ok(
-        (0..left.len())
-            .map(|i| left[i] ^ right[i])
-            .collect()
-    )
-}
-
-pub fn repeating_key_xor(left: &Vec<u8>, right: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
-
-    let keymat = (0..left.len())
-                                .map(|i| right[i % right.len()])
-                                .collect();
-    fixed_xor(left, &keymat)
-}
-
+pub mod xor;
 
 pub fn hamming_distance_byte(left: u8, right: u8) -> usize {
     let differences = left ^ right;
@@ -207,7 +187,7 @@ pub fn recover_xor_key(input: &Vec<u8>) -> Result<(Vec<u8>, char, f32), &'static
     for key in (0 as char)..(0xff as char) {
         //println!("Testing key {}", key as char);
         let keymat = (0..input.len()).map(|_| key as u8).collect();
-        let plaintext = fixed_xor(input, &keymat)?;
+        let plaintext = xor::fixed_xor(input, &keymat)?;
         //println!("\tPlaintext: \"{}\"", String::from_utf8_lossy(&plaintext.clone()));
         let score_object = EnglishScore::from(&plaintext);
         //println!("\tScore: {}", score_object.score);
@@ -374,7 +354,7 @@ mod tests {
             Err(_) => { assert!(false); return Err("") }
         };
 
-        let _ = fixed_xor(&buf1, &buf2)?;
+        let _ = xor::fixed_xor(&buf1, &buf2)?;
         
         Ok(())
     }
@@ -469,7 +449,7 @@ mod tests {
 
         let plainbytes = conversions::str_to_bytes(plaintext).unwrap();
         let keybytes = conversions::str_to_bytes(key).unwrap();
-        let test_left1 = repeating_key_xor(&plainbytes, &keybytes).unwrap();
+        let test_left1 = xor::repeating_key_xor(&plainbytes, &keybytes).unwrap();
         let test_right1 = conversions::read_hexstr_as_bytes(ciphertext).unwrap(); 
         assert_eq!(test_left1, test_right1);
 
@@ -535,7 +515,7 @@ mod tests {
         }
         println!("Key found: {}", conversions::bytes_to_str(&key_chars).unwrap());
 
-        let plaintext = repeating_key_xor(&file_bytes, &key_chars).unwrap();
+        let plaintext = xor::repeating_key_xor(&file_bytes, &key_chars).unwrap();
         let plainstr = conversions::bytes_to_str(&plaintext).unwrap();
         println!("Plaintext: {}", plainstr);
 
