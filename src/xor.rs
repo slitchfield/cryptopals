@@ -1,5 +1,6 @@
 
-use crate::*;
+use crate::utility;
+use crate::xor;
 
 pub fn fixed_xor(left: &Vec<u8>, right: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
 
@@ -33,7 +34,7 @@ pub fn recover_xor_key(input: &Vec<u8>) -> Result<(Vec<u8>, char, f32), &'static
         let keymat = (0..input.len()).map(|_| key as u8).collect();
         let plaintext = xor::fixed_xor(input, &keymat)?;
         //println!("\tPlaintext: \"{}\"", String::from_utf8_lossy(&plaintext.clone()));
-        let score_object = EnglishScore::from(&plaintext);
+        let score_object = utility::EnglishScore::from(&plaintext);
         //println!("\tScore: {}", score_object.score);
         if score_object.score < cur_score {
             //println!("\tFound new best score! Prev: {}, New: {}", cur_score, score_object.score);
@@ -61,13 +62,14 @@ pub fn recover_key_len(input: &Vec<u8>, min_len: usize, max_len: usize) -> Resul
         let block2 = &input[key_len..2*key_len];
         let block3 = &input[2*key_len..3*key_len];
         let block4 = &input[3*key_len..4*key_len];
-        let mut distances: Vec<usize> = vec![];
-        distances.push(hamming_distance(block1, block2).unwrap());
-        distances.push(hamming_distance(block1, block3).unwrap());
-        distances.push(hamming_distance(block1, block4).unwrap());
-        distances.push(hamming_distance(block2, block3).unwrap());
-        distances.push(hamming_distance(block2, block4).unwrap());
-        distances.push(hamming_distance(block3, block4).unwrap());
+        let mut distances: Vec<usize> = vec![
+            utility::hamming_distance(block1, block2).unwrap(),
+            utility::hamming_distance(block1, block3).unwrap(),
+            utility::hamming_distance(block1, block4).unwrap(),
+            utility::hamming_distance(block2, block3).unwrap(),
+            utility::hamming_distance(block2, block4).unwrap(),
+            utility::hamming_distance(block3, block4).unwrap(),
+        ];
         let test_distance = distances.iter().map(|dist| *dist).sum::<usize>() as f32 / 6.0;
         let score: f32 = test_distance / key_len as f32;
 
