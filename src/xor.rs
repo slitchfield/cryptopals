@@ -1,7 +1,7 @@
 use crate::utility;
 use crate::xor;
 
-pub fn fixed_xor(left: &Vec<u8>, right: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
+pub fn fixed_xor(left: &[u8], right: &[u8]) -> Result<Vec<u8>, &'static str> {
     if left.len() != right.len() {
         return Err("fixed_xor: vectors must be the same length");
     }
@@ -10,7 +10,7 @@ pub fn fixed_xor(left: &Vec<u8>, right: &Vec<u8>) -> Result<Vec<u8>, &'static st
 }
 
 pub fn repeating_key_xor(left: &Vec<u8>, right: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
-    let keymat = (0..left.len()).map(|i| right[i % right.len()]).collect();
+    let keymat: Vec<u8> = (0..left.len()).map(|i| right[i % right.len()]).collect();
     fixed_xor(left, &keymat)
 }
 
@@ -21,7 +21,7 @@ pub fn recover_xor_key(input: &Vec<u8>) -> Result<(Vec<u8>, char, f32), &'static
 
     for key in (0 as char)..(0xff as char) {
         //println!("Testing key {}", key as char);
-        let keymat = (0..input.len()).map(|_| key as u8).collect();
+        let keymat: Vec<u8> = (0..input.len()).map(|_| key as u8).collect();
         let plaintext = xor::fixed_xor(input, &keymat)?;
         //println!("\tPlaintext: \"{}\"", String::from_utf8_lossy(&plaintext.clone()));
         let score_object = utility::EnglishScore::from(&plaintext);
