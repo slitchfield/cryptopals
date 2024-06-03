@@ -1,3 +1,4 @@
+use block_ciphers::stable_ecb_oracle;
 use cryptopals::*;
 
 #[test]
@@ -70,5 +71,25 @@ fn challenge_11() -> Result<(), &'static str> {
     let _detected_type =
         crate::block_ciphers::ecb_detector(crate::block_ciphers::encryption_oracle).unwrap();
     dbg!(_detected_type);
+    Ok(())
+}
+
+#[test]
+fn challenge_12() -> Result<(), &'static str> {
+    // 1. Feed identical bytes of your-string to the function 1 at a time --- start with 1 byte ("A"), then "AA", then "AAA" and so on. Discover the block size of the cipher.
+    let block_size = crate::block_ciphers::detect_block_size(stable_ecb_oracle).unwrap();
+
+    // 2. Detect that the function is using ECB.
+    let cryptotype = crate::block_ciphers::ecb_detector(stable_ecb_oracle).unwrap();
+    assert!(matches!(cryptotype, crate::block_ciphers::CRYPTOTYPE::ECB));
+
+    // 3. Knowing the block size, craft an input block that is exactly 1 byte short (for instance, if the block size is 8 bytes, make "AAAAAAA"). Think about what the oracle function is going to put in that last byte position.
+
+    // 4. Make a dictionary of every possible last byte by feeding different strings to the oracle; for instance, "AAAAAAAA", "AAAAAAAB", "AAAAAAAC", remembering the first block of each invocation.
+
+    // 5. Match the output of the one-byte-short input to one of the entries in your dictionary. You've now discovered the first byte of unknown-string.
+
+    // 6. Repeat for the next byte.
+
     Ok(())
 }

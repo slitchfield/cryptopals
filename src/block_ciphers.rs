@@ -146,6 +146,27 @@ pub fn stable_ecb_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     Ok(output_bytes)
 }
 
+pub fn detect_block_size(
+    encrypter: fn(&[u8]) -> Result<Vec<u8>, &'static str>,
+) -> Result<usize, &'static str> {
+    let identified_block_size: usize;
+    let mut inputstr = String::from("A");
+
+    let initial_result = encrypter(&inputstr.as_bytes()).unwrap();
+    let init_block_size = initial_result.len();
+    inputstr.push('A');
+    loop {
+        let result = encrypter(&inputstr.as_bytes()).unwrap();
+        if result.len() != init_block_size {
+            identified_block_size = result.len() - init_block_size;
+            break;
+        } else {
+            inputstr.push('A');
+        }
+    }
+    Ok(identified_block_size)
+}
+
 #[derive(Debug)]
 pub enum CRYPTOTYPE {
     ECB,
@@ -252,6 +273,16 @@ mod tests {
 
         let input = b"Hello from ecb land!";
         let _random_data = stable_ecb_oracle(input);
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn block_size_ident_test() -> Result<(), &'static str> {
+        use super::*;
+
+        let block_size = detect_block_size(stable_ecb_oracle).unwrap();
+        dbg!(block_size);
 
         Ok(())
     }
