@@ -90,7 +90,7 @@ pub fn euclidean_freq_distance(left: &HashMap<u8, f32>, right: &HashMap<u8, f32>
     accum
 }
 
-pub fn count_freq(input: &Vec<u8>) -> HashMap<u8, f32> {
+pub fn count_freq(input: &[u8]) -> HashMap<u8, f32> {
     let mut output: HashMap<u8, f32> = HashMap::from([
         (b'E', 0.),
         (b'A', 0.),
@@ -141,9 +141,9 @@ pub struct EnglishScore {
 
 #[allow(dead_code)]
 impl EnglishScore {
-    pub fn from(input: &Vec<u8>) -> Self {
+    pub fn from(input: &[u8]) -> Self {
         EnglishScore {
-            input_bytes: input.clone(),
+            input_bytes: Vec::from(input),
             input_freq: count_freq(input),
             ideal_freqs: gen_english_map(),
             score: euclidean_freq_distance(&count_freq(input), &gen_english_map()),
@@ -160,10 +160,7 @@ pub fn pkcs7_padding(input: &[u8], block_size: usize) -> Result<Vec<u8>, &'stati
 
     let cur_len = input.len();
     let padding_size = block_size - (cur_len % block_size);
-    let mut padding_bytes: Vec<u8> = (0..padding_size)
-        .into_iter()
-        .map(|_| padding_size as u8)
-        .collect();
+    let mut padding_bytes: Vec<u8> = (0..padding_size).map(|_| padding_size as u8).collect();
     ret_vec.append(&mut padding_bytes);
 
     Ok(ret_vec)

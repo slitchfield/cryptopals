@@ -4,14 +4,12 @@ use crate::conversions::base64_to_bytes;
 use crate::utility;
 use crate::xor::fixed_xor;
 
-use rand::prelude::*;
-
 pub fn generate_random_aeskey(key_len_bytes: usize) -> Result<Vec<u8>, &'static str> {
     let mut buf = vec![0; key_len_bytes];
-    if (openssl::rand::rand_bytes(buf.as_mut_slice()).is_err()) {
+    if openssl::rand::rand_bytes(buf.as_mut_slice()).is_err() {
         return Err("Could not generate random key bytes!");
     }
-    return Ok(buf);
+    Ok(buf)
 }
 
 pub fn simple_ecb_encrypt(input: &[u8], key: &[u8]) -> Result<Vec<u8>, &'static str> {
@@ -32,7 +30,7 @@ pub fn simple_cbc_encrypt(input: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>
     let mut full_ciphertext: Vec<u8> = vec![];
 
     let mut iv_vec: Vec<u8> = Vec::from(iv);
-    if (iv_vec.len() != 16) {
+    if iv_vec.len() != 16 {
         return Err("simple_cbc_encrypt: IV must be 16B long!");
     }
 
@@ -59,7 +57,7 @@ pub fn simple_cbc_decrypt(input: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>
     let mut full_plaintext: Vec<u8> = vec![];
 
     let mut iv_vec: Vec<u8> = Vec::from(iv);
-    if (iv_vec.len() != 16) {
+    if iv_vec.len() != 16 {
         return Err("simple_cbc_decrypt: IV must be 16B long!");
     }
 
@@ -77,7 +75,7 @@ pub fn simple_cbc_decrypt(input: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>
         .unwrap();
         crypter.pad(false);
         let mut block_output = vec![0u8; 32];
-        let count = crypter
+        let _count = crypter
             .update(block_input, block_output.as_mut_slice())
             .unwrap();
         // println!("\tCount: {}", count); // No need to print the count out most of the time.
@@ -111,11 +109,10 @@ pub fn encryption_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     }
     let input_vec = Vec::from(input_vecdeque);
 
-    let mut output_bytes: Vec<u8> = Vec::new();
-    match rand::random::<u8>() % 2 {
+    let output_bytes: Vec<u8> = match rand::random::<u8>() % 2 {
         0 => {
             println!("Oracle chose cbc");
-            output_bytes = crate::block_ciphers::simple_cbc_encrypt(
+            crate::block_ciphers::simple_cbc_encrypt(
                 input_vec.as_slice(),
                 random_key.as_slice(),
                 random_iv.as_slice(),
@@ -124,14 +121,11 @@ pub fn encryption_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
         }
         1 => {
             println!("Oracle chose ecb");
-            output_bytes = crate::block_ciphers::simple_ecb_encrypt(
-                input_vec.as_slice(),
-                random_key.as_slice(),
-            )
-            .unwrap()
+            crate::block_ciphers::simple_ecb_encrypt(input_vec.as_slice(), random_key.as_slice())
+                .unwrap()
         }
         _ => return Err("encryption_oracle: Broke math! (% 2)"),
-    }
+    };
 
     Ok(output_bytes)
 }
@@ -145,8 +139,7 @@ pub fn stable_ecb_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     let mut input_vec = Vec::from(input);
     input_vec.extend_from_slice(&unknown_string);
 
-    let mut output_bytes: Vec<u8> = Vec::new();
-    output_bytes =
+    let output_bytes: Vec<u8> =
         crate::block_ciphers::simple_ecb_encrypt(input_vec.as_slice(), random_key.as_slice())
             .unwrap();
 
@@ -159,7 +152,7 @@ pub enum CRYPTOTYPE {
     CBC,
 }
 
-fn find_repeated_blocks(ciphertext: &Vec<u8>, blocklen: usize) -> bool {
+fn find_repeated_blocks(ciphertext: &[u8], blocklen: usize) -> bool {
     let num_blocks = ciphertext.len() / blocklen;
     dbg!(num_blocks);
 
@@ -176,7 +169,7 @@ fn find_repeated_blocks(ciphertext: &Vec<u8>, blocklen: usize) -> bool {
             for byte in ciphertext[r_idx..r_idx + 16].iter() {
                 print!("{:02x} ", *byte);
             }
-            if (ciphertext[l_idx..l_idx + 16] == ciphertext[r_idx..r_idx + 16]) {
+            if ciphertext[l_idx..l_idx + 16] == ciphertext[r_idx..r_idx + 16] {
                 println!("\tIdentical");
                 return true;
             }
@@ -195,7 +188,7 @@ pub fn ecb_detector(
     let chosen_plaintext = "X".repeat(4 * blocklen);
     let oracle_ciphertext = encrypter(chosen_plaintext.as_bytes()).unwrap();
 
-    if (find_repeated_blocks(&oracle_ciphertext, blocklen)) {
+    if find_repeated_blocks(&oracle_ciphertext, blocklen) {
         Ok(CRYPTOTYPE::ECB)
     } else {
         Ok(CRYPTOTYPE::CBC)
@@ -204,8 +197,6 @@ pub fn ecb_detector(
 
 #[cfg(test)]
 mod tests {
-    use openssl::symm::encrypt;
-
     #[test]
     pub fn simple_cbc_test() -> Result<(), &'static str> {
         use super::*;

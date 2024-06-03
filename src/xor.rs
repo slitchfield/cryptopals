@@ -9,12 +9,12 @@ pub fn fixed_xor(left: &[u8], right: &[u8]) -> Result<Vec<u8>, &'static str> {
     Ok((0..left.len()).map(|i| left[i] ^ right[i]).collect())
 }
 
-pub fn repeating_key_xor(left: &Vec<u8>, right: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
+pub fn repeating_key_xor(left: &[u8], right: &[u8]) -> Result<Vec<u8>, &'static str> {
     let keymat: Vec<u8> = (0..left.len()).map(|i| right[i % right.len()]).collect();
     fixed_xor(left, &keymat)
 }
 
-pub fn recover_xor_key(input: &Vec<u8>) -> Result<(Vec<u8>, char, f32), &'static str> {
+pub fn recover_xor_key(input: &[u8]) -> Result<(Vec<u8>, char, f32), &'static str> {
     let mut cur_score = f32::INFINITY;
     let mut cur_key = 'A';
     let mut cur_plaintext: Vec<u8> = Vec::new();
