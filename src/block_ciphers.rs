@@ -113,6 +113,7 @@ pub fn encryption_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     let mut output_bytes: Vec<u8> = Vec::new();
     match rand::random::<u8>() % 2 {
         0 => {
+            println!("Oracle chose cbc");
             output_bytes = crate::block_ciphers::simple_cbc_encrypt(
                 input_vec.as_slice(),
                 random_key.as_slice(),
@@ -121,6 +122,7 @@ pub fn encryption_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
             .unwrap()
         }
         1 => {
+            println!("Oracle chose ecb");
             output_bytes = crate::block_ciphers::simple_ecb_encrypt(
                 input_vec.as_slice(),
                 random_key.as_slice(),
@@ -131,6 +133,54 @@ pub fn encryption_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     }
 
     Ok(output_bytes)
+}
+
+#[derive(Debug)]
+pub enum CRYPTOTYPE {
+    ECB,
+    CBC,
+}
+
+fn find_repeated_blocks(ciphertext: &Vec<u8>, blocklen: usize) -> bool {
+    let num_blocks = ciphertext.len() / blocklen;
+    dbg!(num_blocks);
+
+    for i in 0..num_blocks {
+        for j in i+1..num_blocks {
+            let l_idx = i*blocklen;
+            let r_idx = j*blocklen;
+            println!("Comparing blocks {} and {}", i, j);
+            print!("\tLeft:  ");
+            for byte in ciphertext[l_idx..l_idx+16].iter() {
+                print!("{:02x} ", *byte);
+            }
+            print!("\tRight: ");
+            for byte in ciphertext[r_idx..r_idx+16].iter() {
+                print!("{:02x} ", *byte);
+            }
+            if ( ciphertext[l_idx..l_idx+16] == ciphertext[r_idx..r_idx+16] ) {
+                println!("\tIdentical");
+                return true
+            }
+            println!("\tNot identical");
+        }        
+    }
+
+    false
+}
+
+pub fn ecb_detector(encrypter: fn(&[u8]) -> Result<Vec<u8>, &'static str>) -> Result<CRYPTOTYPE, &'static str> {
+
+    // Generate input long enough to have at least two full cipher blocks
+    let blocklen: usize = 16;
+    let chosen_plaintext = "X".repeat(4*blocklen);
+    let oracle_ciphertext = encrypter(chosen_plaintext.as_bytes()).unwrap();
+
+    if ( find_repeated_blocks(&oracle_ciphertext, blocklen) ) {
+        Ok(CRYPTOTYPE::ECB)
+    } else {
+        Ok(CRYPTOTYPE::CBC)
+    }
 }
 
 #[cfg(test)]
@@ -184,4 +234,5 @@ mod tests {
 
         Ok(())
     }
+
 }

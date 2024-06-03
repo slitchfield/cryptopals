@@ -64,3 +64,10 @@ fn challenge_10() -> Result<(), &'static str> {
 
     Ok(())
 }
+
+#[test]
+fn challenge_11() -> Result<(), &'static str> {
+    let _detected_type = crate::block_ciphers::ecb_detector(crate::block_ciphers::encryption_oracle).unwrap();
+    dbg!(_detected_type);
+    Ok(())
+}
