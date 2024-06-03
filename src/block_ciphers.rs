@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use crate::conversions::base64_to_bytes;
 use crate::utility;
 use crate::xor::fixed_xor;
 
@@ -135,6 +136,23 @@ pub fn encryption_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     Ok(output_bytes)
 }
 
+pub fn stable_ecb_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
+    let random_key = Vec::from([
+        48, 95, 77, 88, 214, 163, 80, 78, 205, 3, 202, 129, 233, 242, 221, 162,
+    ]);
+
+    let unknown_string = base64_to_bytes(String::from("Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")).unwrap();
+    let mut input_vec = Vec::from(input);
+    input_vec.extend_from_slice(&unknown_string);
+
+    let mut output_bytes: Vec<u8> = Vec::new();
+    output_bytes =
+        crate::block_ciphers::simple_ecb_encrypt(input_vec.as_slice(), random_key.as_slice())
+            .unwrap();
+
+    Ok(output_bytes)
+}
+
 #[derive(Debug)]
 pub enum CRYPTOTYPE {
     ECB,
@@ -146,37 +164,38 @@ fn find_repeated_blocks(ciphertext: &Vec<u8>, blocklen: usize) -> bool {
     dbg!(num_blocks);
 
     for i in 0..num_blocks {
-        for j in i+1..num_blocks {
-            let l_idx = i*blocklen;
-            let r_idx = j*blocklen;
+        for j in i + 1..num_blocks {
+            let l_idx = i * blocklen;
+            let r_idx = j * blocklen;
             println!("Comparing blocks {} and {}", i, j);
             print!("\tLeft:  ");
-            for byte in ciphertext[l_idx..l_idx+16].iter() {
+            for byte in ciphertext[l_idx..l_idx + 16].iter() {
                 print!("{:02x} ", *byte);
             }
             print!("\tRight: ");
-            for byte in ciphertext[r_idx..r_idx+16].iter() {
+            for byte in ciphertext[r_idx..r_idx + 16].iter() {
                 print!("{:02x} ", *byte);
             }
-            if ( ciphertext[l_idx..l_idx+16] == ciphertext[r_idx..r_idx+16] ) {
+            if (ciphertext[l_idx..l_idx + 16] == ciphertext[r_idx..r_idx + 16]) {
                 println!("\tIdentical");
-                return true
+                return true;
             }
             println!("\tNot identical");
-        }        
+        }
     }
 
     false
 }
 
-pub fn ecb_detector(encrypter: fn(&[u8]) -> Result<Vec<u8>, &'static str>) -> Result<CRYPTOTYPE, &'static str> {
-
+pub fn ecb_detector(
+    encrypter: fn(&[u8]) -> Result<Vec<u8>, &'static str>,
+) -> Result<CRYPTOTYPE, &'static str> {
     // Generate input long enough to have at least two full cipher blocks
     let blocklen: usize = 16;
-    let chosen_plaintext = "X".repeat(4*blocklen);
+    let chosen_plaintext = "X".repeat(4 * blocklen);
     let oracle_ciphertext = encrypter(chosen_plaintext.as_bytes()).unwrap();
 
-    if ( find_repeated_blocks(&oracle_ciphertext, blocklen) ) {
+    if (find_repeated_blocks(&oracle_ciphertext, blocklen)) {
         Ok(CRYPTOTYPE::ECB)
     } else {
         Ok(CRYPTOTYPE::CBC)
@@ -221,6 +240,7 @@ mod tests {
             Ok(r) => r,
             Err(e) => return Err(e),
         };
+        dbg!(&rand_bytes);
         assert_eq!(rand_bytes.len(), 16usize);
         Ok(())
     }
@@ -235,4 +255,13 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    pub fn stable_oracle_test() -> Result<(), &'static str> {
+        use super::*;
+
+        let input = b"Hello from ecb land!";
+        let _random_data = stable_ecb_oracle(input);
+
+        Ok(())
+    }
 }
