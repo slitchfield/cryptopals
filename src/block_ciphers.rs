@@ -1,5 +1,17 @@
+use std::collections::VecDeque;
+
 use crate::utility;
 use crate::xor::fixed_xor;
+
+use rand::prelude::*;
+
+pub fn generate_random_aeskey(key_len_bytes: usize) -> Result<Vec<u8>, &'static str> {
+    let mut buf = vec![0; key_len_bytes];
+    if (openssl::rand::rand_bytes(buf.as_mut_slice()).is_err()) {
+        return Err("Could not generate random key bytes!");
+    }
+    return Ok(buf);
+}
 
 pub fn simple_ecb_encrypt(input: &[u8], key: &[u8]) -> Result<Vec<u8>, &'static str> {
     let ciphertext =
@@ -7,11 +19,7 @@ pub fn simple_ecb_encrypt(input: &[u8], key: &[u8]) -> Result<Vec<u8>, &'static 
     Ok(ciphertext)
 }
 
-pub fn simple_cbc_encrypt(
-    input: &[u8],
-    key: &[u8],
-    iv: &[u8; 16],
-) -> Result<Vec<u8>, &'static str> {
+pub fn simple_cbc_encrypt(input: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, &'static str> {
     let mut plaintext = Vec::from(input);
 
     // Pad plaintext to make it an integer number of 16B blocks
@@ -22,7 +30,10 @@ pub fn simple_cbc_encrypt(
 
     let mut full_ciphertext: Vec<u8> = vec![];
 
-    let mut iv_vec: Vec<u8> = Vec::from(*iv);
+    let mut iv_vec: Vec<u8> = Vec::from(iv);
+    if (iv_vec.len() != 16) {
+        return Err("simple_cbc_encrypt: IV must be 16B long!");
+    }
 
     for i in 0..plaintext.len() / 16 {
         let block_input = fixed_xor(&plaintext[i * 16..(i + 1) * 16], &iv_vec[0..16]).unwrap();
@@ -41,16 +52,16 @@ pub fn simple_cbc_encrypt(
     Ok(full_ciphertext)
 }
 
-pub fn simple_cbc_decrypt(
-    input: &[u8],
-    key: &[u8],
-    iv: &[u8; 16],
-) -> Result<Vec<u8>, &'static str> {
+pub fn simple_cbc_decrypt(input: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, &'static str> {
     let ciphertext = Vec::from(input);
 
     let mut full_plaintext: Vec<u8> = vec![];
 
-    let mut iv_vec: Vec<u8> = Vec::from(*iv);
+    let mut iv_vec: Vec<u8> = Vec::from(iv);
+    if (iv_vec.len() != 16) {
+        return Err("simple_cbc_decrypt: IV must be 16B long!");
+    }
+
     // For each block...
     for i in 0..ciphertext.len() / 16 {
         let block_input = &ciphertext[i * 16..(i + 1) * 16];
@@ -68,7 +79,7 @@ pub fn simple_cbc_decrypt(
         let count = crypter
             .update(block_input, block_output.as_mut_slice())
             .unwrap();
-        println!("\tCount: {}", count);
+        // println!("\tCount: {}", count); // No need to print the count out most of the time.
 
         // XOR the result with the current IV
         let block_plaintext = fixed_xor(&block_output[0..16], &iv_vec[0..16]).unwrap();
@@ -81,8 +92,50 @@ pub fn simple_cbc_decrypt(
     Ok(full_plaintext)
 }
 
+pub fn encryption_oracle(input: &[u8]) -> Result<Vec<u8>, &'static str> {
+    let random_key = generate_random_aeskey(16).unwrap();
+    let random_iv = generate_random_aeskey(16).unwrap();
+
+    let num_prepend: u8 = (rand::random::<u8>() % 6) + 5; // Uniform over 5-10
+    let num_append: u8 = (rand::random::<u8>() % 6) + 5; // Uniform over 5-10
+    let prepend_bytes = generate_random_aeskey(num_prepend as usize).unwrap();
+    let append_bytes = generate_random_aeskey(num_append as usize).unwrap();
+
+    let mut input_vecdeque = VecDeque::from(Vec::from(input));
+    for byte in prepend_bytes {
+        input_vecdeque.push_front(byte);
+    }
+    for byte in append_bytes {
+        input_vecdeque.push_back(byte);
+    }
+    let input_vec = Vec::from(input_vecdeque);
+
+    let mut output_bytes: Vec<u8> = Vec::new();
+    match rand::random::<u8>() % 2 {
+        0 => {
+            output_bytes = crate::block_ciphers::simple_cbc_encrypt(
+                input_vec.as_slice(),
+                random_key.as_slice(),
+                random_iv.as_slice(),
+            )
+            .unwrap()
+        }
+        1 => {
+            output_bytes = crate::block_ciphers::simple_ecb_encrypt(
+                input_vec.as_slice(),
+                random_key.as_slice(),
+            )
+            .unwrap()
+        }
+        _ => return Err("encryption_oracle: Broke math! (% 2)"),
+    }
+
+    Ok(output_bytes)
+}
+
 #[cfg(test)]
 mod tests {
+    use openssl::symm::encrypt;
 
     #[test]
     pub fn simple_cbc_test() -> Result<(), &'static str> {
@@ -108,6 +161,27 @@ mod tests {
             "Second recovered plaintext: {}",
             conversions::bytes_to_str(&second_recovered_plaintext).unwrap()
         );
+        Ok(())
+    }
+
+    #[test]
+    pub fn simple_keygen_test() -> Result<(), &'static str> {
+        use super::*;
+        let rand_bytes = match generate_random_aeskey(16) {
+            Ok(r) => r,
+            Err(e) => return Err(e),
+        };
+        assert_eq!(rand_bytes.len(), 16usize);
+        Ok(())
+    }
+
+    #[test]
+    pub fn encryption_oracle_test() -> Result<(), &'static str> {
+        use super::*;
+
+        let input = b"Hello from cbc land!";
+        let _random_data = encryption_oracle(input);
+
         Ok(())
     }
 }
