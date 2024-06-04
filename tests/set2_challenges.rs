@@ -91,48 +91,66 @@ fn find_key_for_value(map: &HashMap<u8, Vec<u8>>, value: &Vec<u8>) -> Option<u8>
 
 fn find_next_char(
     block_size: usize,
-    _block_offset: usize,
-    oracle_input: String,
     unknown_message: &String,
     oracle: fn(&[u8]) -> Result<Vec<u8>, &'static str>,
-) -> char {
+) -> Option<char> {
+    // Identify required inputs
+    let num_identified_chars = unknown_message.len();
+    let cur_char_idx = num_identified_chars;
+    let block_offset = cur_char_idx / block_size;
+    let char_offset = cur_char_idx % block_size;
+    let oracle_input = "A".repeat(block_size - (char_offset + 1));
+    println!("Cracking Block {} Char {}", block_offset, char_offset);
+    println!("\tResulting oracle input: {}", oracle_input);
 
     // 4. Make a dictionary of every possible last byte by feeding different strings to the oracle; for instance, "AAAAAAAA", "AAAAAAAB", "AAAAAAAC", remembering the first block of each invocation.
     println!("Generating dictionary...");
     let printable_ascii = b" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
     let mut oracle_dictionary: HashMap<u8, Vec<u8>> = HashMap::new();
-    for ch in printable_ascii {
+    for ch in 0u8..128u8 {
         let mut full_oracle_input = oracle_input.clone();
         full_oracle_input.push_str(unknown_message);
-        full_oracle_input.push(*ch as char);
-        let mut oracle_output = oracle(full_oracle_input.as_bytes()).unwrap();
-        oracle_output.truncate(block_size);
-        print!("\tPushing \'{}\' => \'", full_oracle_input);
-        for b in oracle_output.iter() {
+        full_oracle_input.push(ch as char);
+        let start_idx = block_offset * block_size;
+        let end_idx = start_idx + block_size;
+        let oracle_output = oracle(&full_oracle_input.as_bytes()).unwrap();
+        let block_of_interest = Vec::from(&oracle_output[start_idx..end_idx]);
+        print!(
+            "\tPushing \'{}\' => ({}..{}) \'",
+            &full_oracle_input[start_idx..end_idx],
+            start_idx,
+            end_idx
+        );
+        for b in block_of_interest.iter() {
             print!("{:02x} ", b);
         }
         println!("\'");
-        oracle_dictionary.insert(*ch, oracle_output);
+        oracle_dictionary.insert(ch, block_of_interest);
     }
 
     // 5. Match the output of the one-byte-short input to one of the entries in your dictionary. You've now discovered the first byte of unknown-string.
     println!("Trying short block...");
     let mut oracle_output = oracle(oracle_input.as_bytes()).unwrap();
+    let start_idx = block_offset * block_size;
+    let end_idx = start_idx + block_size;
+    let block_of_interest = Vec::from(&oracle_output[start_idx..end_idx]);
     oracle_output.truncate(block_size);
-    print!("\tGot     \'{}\'  => \'", oracle_input);
-    for b in oracle_output.iter() {
+    print!("\tGot     \'{:15}\'  => \'", oracle_input);
+    for b in block_of_interest.iter() {
         print!("{:02x} ", b);
     }
     println!("\'");
-    let next_char = find_key_for_value(&oracle_dictionary, &oracle_output)
-        .unwrap_or_else(|| panic!("Could not find expected output!"));
-    print!("\tFound match            \'{}\' => \'", next_char as char);
-    for b in oracle_dictionary[&next_char].iter() {
-        print!("{:02x} ", b);
+    if let Some(next_char) = find_key_for_value(&oracle_dictionary, &block_of_interest) {
+        print!("\tFound match            \'{}\' => \'", next_char as char);
+        for b in oracle_dictionary[&next_char].iter() {
+            print!("{:02x} ", b);
+        }
+        println!("");
+        Some(next_char as char)
+    } else {
+        println!("Could not find match, presumed end of message");
+        None
     }
-    println!("");
-
-    next_char as char
 }
 
 #[test]
@@ -145,13 +163,26 @@ fn challenge_12() -> Result<(), &'static str> {
     let cryptotype = crate::block_ciphers::ecb_detector(stable_ecb_oracle).unwrap();
     assert!(matches!(cryptotype, crate::block_ciphers::CRYPTOTYPE::ECB));
 
-    let _unknown_message_len = crate::block_ciphers::stable_ecb_oracle("".as_bytes());
+    let unknown_message_len = crate::block_ciphers::stable_ecb_oracle("".as_bytes())
+        .unwrap()
+        .len();
 
-    for char_idx in 1..16 {
-        let oracle_input = "A".repeat(block_size - char_idx);
-        unknown_message.push(find_next_char(block_size, 0, oracle_input, &unknown_message, crate::block_ciphers::stable_ecb_oracle));
-        println!("Unknown message: {}", unknown_message);
+    for char_idx in 0..unknown_message_len {
+        println!("Cracking offset {} of {}", char_idx, unknown_message_len);
+        if let Some(next_char) = find_next_char(
+            block_size,
+            &unknown_message,
+            crate::block_ciphers::stable_ecb_oracle,
+        ) {
+            unknown_message.push(next_char);
+            println!("Unknown message:\n{}", unknown_message);
+        } else {
+            println!("Could not find next char. Presumed end of message, exiting");
+            break;
+        }
     }
+
+    print!("Final unknown message:\n\n{}", unknown_message);
 
     Ok(())
 }
