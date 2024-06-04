@@ -89,17 +89,13 @@ fn find_key_for_value(map: &HashMap<u8, Vec<u8>>, value: &Vec<u8>) -> Option<u8>
     })
 }
 
-#[test]
-fn challenge_12() -> Result<(), &'static str> {
-    // 1. Feed identical bytes of your-string to the function 1 at a time --- start with 1 byte ("A"), then "AA", then "AAA" and so on. Discover the block size of the cipher.
-    let block_size = crate::block_ciphers::detect_block_size(stable_ecb_oracle).unwrap();
-
-    // 2. Detect that the function is using ECB.
-    let cryptotype = crate::block_ciphers::ecb_detector(stable_ecb_oracle).unwrap();
-    assert!(matches!(cryptotype, crate::block_ciphers::CRYPTOTYPE::ECB));
-
-    // 3. Knowing the block size, craft an input block that is exactly 1 byte short (for instance, if the block size is 8 bytes, make "AAAAAAA"). Think about what the oracle function is going to put in that last byte position.
-    let oracle_input = "A".repeat(block_size - 1);
+fn find_next_char(
+    block_size: usize,
+    _block_offset: usize,
+    oracle_input: String,
+    unknown_message: &String,
+    oracle: fn(&[u8]) -> Result<Vec<u8>, &'static str>,
+) -> char {
 
     // 4. Make a dictionary of every possible last byte by feeding different strings to the oracle; for instance, "AAAAAAAA", "AAAAAAAB", "AAAAAAAC", remembering the first block of each invocation.
     println!("Generating dictionary...");
@@ -107,9 +103,9 @@ fn challenge_12() -> Result<(), &'static str> {
     let mut oracle_dictionary: HashMap<u8, Vec<u8>> = HashMap::new();
     for ch in printable_ascii {
         let mut full_oracle_input = oracle_input.clone();
+        full_oracle_input.push_str(unknown_message);
         full_oracle_input.push(*ch as char);
-        let mut oracle_output =
-            crate::block_ciphers::stable_ecb_oracle(full_oracle_input.as_bytes()).unwrap();
+        let mut oracle_output = oracle(full_oracle_input.as_bytes()).unwrap();
         oracle_output.truncate(block_size);
         print!("\tPushing \'{}\' => \'", full_oracle_input);
         for b in oracle_output.iter() {
@@ -121,19 +117,41 @@ fn challenge_12() -> Result<(), &'static str> {
 
     // 5. Match the output of the one-byte-short input to one of the entries in your dictionary. You've now discovered the first byte of unknown-string.
     println!("Trying short block...");
-    let mut oracle_output =
-        crate::block_ciphers::stable_ecb_oracle(oracle_input.as_bytes()).unwrap();
+    let mut oracle_output = oracle(oracle_input.as_bytes()).unwrap();
     oracle_output.truncate(block_size);
-    print!("\tGot     \'{}\' => \'", oracle_input);
+    print!("\tGot     \'{}\'  => \'", oracle_input);
     for b in oracle_output.iter() {
         print!("{:02x} ", b);
     }
     println!("\'");
-    let first_char = find_key_for_value(&oracle_dictionary, &oracle_output)
+    let next_char = find_key_for_value(&oracle_dictionary, &oracle_output)
         .unwrap_or_else(|| panic!("Could not find expected output!"));
-    dbg!(first_char as char);
+    print!("\tFound match            \'{}\' => \'", next_char as char);
+    for b in oracle_dictionary[&next_char].iter() {
+        print!("{:02x} ", b);
+    }
+    println!("");
 
-    // 6. Repeat for the next byte.
+    next_char as char
+}
+
+#[test]
+fn challenge_12() -> Result<(), &'static str> {
+    let mut unknown_message = String::new();
+    // 1. Feed identical bytes of your-string to the function 1 at a time --- start with 1 byte ("A"), then "AA", then "AAA" and so on. Discover the block size of the cipher.
+    let block_size = crate::block_ciphers::detect_block_size(stable_ecb_oracle).unwrap();
+
+    // 2. Detect that the function is using ECB.
+    let cryptotype = crate::block_ciphers::ecb_detector(stable_ecb_oracle).unwrap();
+    assert!(matches!(cryptotype, crate::block_ciphers::CRYPTOTYPE::ECB));
+
+    let _unknown_message_len = crate::block_ciphers::stable_ecb_oracle("".as_bytes());
+
+    for char_idx in 1..16 {
+        let oracle_input = "A".repeat(block_size - char_idx);
+        unknown_message.push(find_next_char(block_size, 0, oracle_input, &unknown_message, crate::block_ciphers::stable_ecb_oracle));
+        println!("Unknown message: {}", unknown_message);
+    }
 
     Ok(())
 }
