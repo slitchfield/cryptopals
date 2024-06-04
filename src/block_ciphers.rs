@@ -44,7 +44,7 @@ pub fn simple_cbc_encrypt(input: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>
         )
         .unwrap();
         println!("Block ciphertext len? {}", block_ciphertext.len());
-        iv_vec = block_ciphertext.clone();
+        iv_vec.clone_from(&block_ciphertext);
         full_ciphertext.extend(&block_ciphertext[0..16]);
     }
 
@@ -152,11 +152,11 @@ pub fn detect_block_size(
     let identified_block_size: usize;
     let mut inputstr = String::from("A");
 
-    let initial_result = encrypter(&inputstr.as_bytes()).unwrap();
+    let initial_result = encrypter(inputstr.as_bytes()).unwrap();
     let init_block_size = initial_result.len();
     inputstr.push('A');
     loop {
-        let result = encrypter(&inputstr.as_bytes()).unwrap();
+        let result = encrypter(inputstr.as_bytes()).unwrap();
         if result.len() != init_block_size {
             identified_block_size = result.len() - init_block_size;
             break;

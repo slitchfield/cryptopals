@@ -74,6 +74,21 @@ fn challenge_11() -> Result<(), &'static str> {
     Ok(())
 }
 
+fn vector_compare(va: &[u8], vb: &[u8]) -> bool {
+    (va.len() == vb.len()) && va.iter().zip(vb).all(|(a, b)| a == b)
+}
+
+use std::collections::HashMap;
+fn find_key_for_value(map: &HashMap<u8, Vec<u8>>, value: &Vec<u8>) -> Option<u8> {
+    map.iter().find_map(|(key, val)| {
+        if vector_compare(val, value) {
+            Some(*key)
+        } else {
+            None
+        }
+    })
+}
+
 #[test]
 fn challenge_12() -> Result<(), &'static str> {
     // 1. Feed identical bytes of your-string to the function 1 at a time --- start with 1 byte ("A"), then "AA", then "AAA" and so on. Discover the block size of the cipher.
@@ -84,10 +99,39 @@ fn challenge_12() -> Result<(), &'static str> {
     assert!(matches!(cryptotype, crate::block_ciphers::CRYPTOTYPE::ECB));
 
     // 3. Knowing the block size, craft an input block that is exactly 1 byte short (for instance, if the block size is 8 bytes, make "AAAAAAA"). Think about what the oracle function is going to put in that last byte position.
+    let oracle_input = "A".repeat(block_size - 1);
 
     // 4. Make a dictionary of every possible last byte by feeding different strings to the oracle; for instance, "AAAAAAAA", "AAAAAAAB", "AAAAAAAC", remembering the first block of each invocation.
+    println!("Generating dictionary...");
+    let printable_ascii = b" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+    let mut oracle_dictionary: HashMap<u8, Vec<u8>> = HashMap::new();
+    for ch in printable_ascii {
+        let mut full_oracle_input = oracle_input.clone();
+        full_oracle_input.push(*ch as char);
+        let mut oracle_output =
+            crate::block_ciphers::stable_ecb_oracle(full_oracle_input.as_bytes()).unwrap();
+        oracle_output.truncate(block_size);
+        print!("\tPushing \'{}\' => \'", full_oracle_input);
+        for b in oracle_output.iter() {
+            print!("{:02x} ", b);
+        }
+        println!("\'");
+        oracle_dictionary.insert(*ch, oracle_output);
+    }
 
     // 5. Match the output of the one-byte-short input to one of the entries in your dictionary. You've now discovered the first byte of unknown-string.
+    println!("Trying short block...");
+    let mut oracle_output =
+        crate::block_ciphers::stable_ecb_oracle(oracle_input.as_bytes()).unwrap();
+    oracle_output.truncate(block_size);
+    print!("\tGot     \'{}\' => \'", oracle_input);
+    for b in oracle_output.iter() {
+        print!("{:02x} ", b);
+    }
+    println!("\'");
+    let first_char = find_key_for_value(&oracle_dictionary, &oracle_output)
+        .unwrap_or_else(|| panic!("Could not find expected output!"));
+    dbg!(first_char as char);
 
     // 6. Repeat for the next byte.
 
