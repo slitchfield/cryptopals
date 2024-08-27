@@ -105,7 +105,7 @@ fn find_next_char(
 
     // 4. Make a dictionary of every possible last byte by feeding different strings to the oracle; for instance, "AAAAAAAA", "AAAAAAAB", "AAAAAAAC", remembering the first block of each invocation.
     println!("Generating dictionary...");
-    let printable_ascii = b" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+    // let printable_ascii = b" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
     let mut oracle_dictionary: HashMap<u8, Vec<u8>> = HashMap::new();
     for ch in 0u8..128u8 {
         let mut full_oracle_input = oracle_input.clone();
@@ -184,5 +184,68 @@ fn challenge_12() -> Result<(), &'static str> {
 
     print!("Final unknown message:\n\n{}", unknown_message);
 
+    Ok(())
+}
+
+fn kv_parsing(input_str: &str) -> Result<HashMap<String, String>, &'static String> {
+    // Rough set of operations
+    // 1. Split input_str by '&' characters
+    // 2. Split each sub-token by '=' characters
+    // 3. Insert k/v into hashmap
+    let mut ret_map = HashMap::new();
+
+    for token in input_str.split('&') {
+        let (k, v) = token.split_at(token.find('=').unwrap());
+        let v = &v[1..];
+        println!("Token: \"{}\" = \"{}\"", k, v);
+        ret_map.insert(String::from(k), String::from(v));
+    }
+    Ok(ret_map)
+}
+
+fn kv_encoding(input_struct: &HashMap<String, String>) -> Result<String, &'static String> {
+
+    let mut ret_str: String = String::new();
+    for (k, v) in input_struct {
+        ret_str.push_str(k.as_str());
+        ret_str.push_str("=");
+        ret_str.push_str(v.as_str());
+        ret_str.push_str("&")
+    }
+    ret_str.pop(); // Remove trailing "&". TODO: find way to insert & only between tokens
+    Ok(ret_str)
+}
+
+use std::sync::atomic::{AtomicU32, Ordering};
+fn profile_for(emailaddr: String) -> Result<String, &'static String> {
+    // First, escape all encoding metacharacters
+    let sanitized_email = emailaddr.replace("&", "AND");
+    let sanitized_email = sanitized_email.replace("=", "EQUALS");
+    static uid_gen: AtomicU32 = AtomicU32::new(0);
+    let uid = uid_gen.fetch_add(1, Ordering::Relaxed);
+    let role = String::from("user");
+
+    let mut encoded_str = String::new();
+    encoded_str.push_str("email=");
+    encoded_str.push_str(&sanitized_email);
+    encoded_str.push_str("&uid=");
+    encoded_str.push_str(&uid.to_string());
+    encoded_str.push_str("&role=");
+    encoded_str.push_str(&role);
+
+    Ok(encoded_str)
+}
+
+#[test]
+fn challenge_13() -> Result<(), &'static String> {
+
+    let input_str = "foo=bar&baz=qux&zap=zazzle";
+    let parsed_struct: HashMap<String, String> = kv_parsing(&input_str)?;
+    let _encoded_str = kv_encoding(&parsed_struct)?;
+
+    let encoded_profile = profile_for(String::from("foo@bar.com"))?; 
+    dbg!(encoded_profile);
+    let encoded_profile = profile_for(String::from("foo@bar.com&role=admin"))?; 
+    dbg!(encoded_profile);
     Ok(())
 }
