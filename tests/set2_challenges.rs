@@ -187,65 +187,97 @@ fn challenge_12() -> Result<(), &'static str> {
     Ok(())
 }
 
-fn kv_parsing(input_str: &str) -> Result<HashMap<String, String>, &'static String> {
-    // Rough set of operations
+fn kv_parsing(input_str: &str) -> Result<HashMap<String, String>, &'static str> {
     // 1. Split input_str by '&' characters
     // 2. Split each sub-token by '=' characters
     // 3. Insert k/v into hashmap
     let mut ret_map = HashMap::new();
 
     for token in input_str.split('&') {
-        let (k, v) = token.split_at(token.find('=').unwrap());
-        let v = &v[1..];
-        println!("Token: \"{}\" = \"{}\"", k, v);
+        let Some((k, v)) = token.split_once('=') else {
+            return Err("kv_parsing: token missing '='");
+        };
         ret_map.insert(String::from(k), String::from(v));
     }
     Ok(ret_map)
 }
 
-fn kv_encoding(input_struct: &HashMap<String, String>) -> Result<String, &'static String> {
-
-    let mut ret_str: String = String::new();
-    for (k, v) in input_struct {
-        ret_str.push_str(k.as_str());
-        ret_str.push_str("=");
-        ret_str.push_str(v.as_str());
-        ret_str.push_str("&")
-    }
-    ret_str.pop(); // Remove trailing "&". TODO: find way to insert & only between tokens
-    Ok(ret_str)
+fn kv_encoding(input_struct: &HashMap<String, String>) -> Result<String, &'static str> {
+    let tokens: Vec<String> = input_struct
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect();
+    Ok(tokens.join("&"))
 }
 
 use std::sync::atomic::{AtomicU32, Ordering};
-fn profile_for(emailaddr: String) -> Result<String, &'static String> {
+fn profile_for(emailaddr: &str) -> Result<String, &'static str> {
     // First, escape all encoding metacharacters
-    let sanitized_email = emailaddr.replace("&", "AND");
-    let sanitized_email = sanitized_email.replace("=", "EQUALS");
-    static uid_gen: AtomicU32 = AtomicU32::new(0);
-    let uid = uid_gen.fetch_add(1, Ordering::Relaxed);
-    let role = String::from("user");
+    let sanitized_email = emailaddr.replace("&", "AND").replace("=", "EQUALS");
+    static UID_GEN: AtomicU32 = AtomicU32::new(0);
+    let uid = UID_GEN.fetch_add(1, Ordering::Relaxed);
 
-    let mut encoded_str = String::new();
-    encoded_str.push_str("email=");
-    encoded_str.push_str(&sanitized_email);
-    encoded_str.push_str("&uid=");
-    encoded_str.push_str(&uid.to_string());
-    encoded_str.push_str("&role=");
-    encoded_str.push_str(&role);
+    Ok(format!("email={}&uid={}&role=user", sanitized_email, uid))
+}
 
-    Ok(encoded_str)
+// Fixed-per-process key, only reachable through the two functions below.
+fn profile_key() -> &'static [u8] {
+    static KEY: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    KEY.get_or_init(|| block_ciphers::generate_random_aeskey(16).unwrap())
+}
+
+// The "oracle": the attacker may call this with an email, but never sees the key.
+fn encrypted_profile_for(emailaddr: &str) -> Result<Vec<u8>, &'static str> {
+    let profile = profile_for(emailaddr)?;
+    block_ciphers::simple_ecb_encrypt(profile.as_bytes(), profile_key())
+}
+
+// The "server": decrypts and parses a profile cookie.
+fn decrypt_profile(ciphertext: &[u8]) -> Result<HashMap<String, String>, &'static str> {
+    let plaintext = openssl::symm::decrypt(
+        openssl::symm::Cipher::aes_128_ecb(),
+        profile_key(),
+        None,
+        ciphertext,
+    )
+    .map_err(|_| "decrypt_profile: bad padding")?;
+    let plaintext = String::from_utf8(plaintext).map_err(|_| "decrypt_profile: not utf8")?;
+    kv_parsing(&plaintext)
 }
 
 #[test]
-fn challenge_13() -> Result<(), &'static String> {
+fn challenge_13() -> Result<(), &'static str> {
+    let parsed = kv_parsing("foo=bar&baz=qux&zap=zazzle")?;
+    assert_eq!(parsed["baz"], "qux");
+    assert_eq!(kv_parsing(&kv_encoding(&parsed)?)?, parsed);
+    assert!(kv_parsing("no_equals_here").is_err());
 
-    let input_str = "foo=bar&baz=qux&zap=zazzle";
-    let parsed_struct: HashMap<String, String> = kv_parsing(&input_str)?;
-    let _encoded_str = kv_encoding(&parsed_struct)?;
+    // Metacharacters in the email must not be able to inject fields.
+    let honest = profile_for("foo@bar.com&role=admin")?;
+    assert!(honest.ends_with("&role=user"));
 
-    let encoded_profile = profile_for(String::from("foo@bar.com"))?; 
-    dbg!(encoded_profile);
-    let encoded_profile = profile_for(String::from("foo@bar.com&role=admin"))?; 
-    dbg!(encoded_profile);
+    const BLOCK: usize = 16;
+
+    // Step 1: get a ciphertext block that decrypts to "admin" + PKCS#7 padding.
+    // "email=" is 6 bytes, so 10 filler bytes push the next block to a boundary.
+    let mut admin_email = String::from("AAAAAAAAAA");
+    admin_email.push_str("admin");
+    admin_email.push_str(&"\x0b".repeat(BLOCK - "admin".len()));
+    let admin_ct = encrypted_profile_for(&admin_email)?;
+    let admin_block = &admin_ct[BLOCK..2 * BLOCK];
+
+    // Step 2: pick an email so "...&role=" ends exactly on a block boundary,
+    // leaving "user" + padding alone in the last block. With a single-digit
+    // uid: 6 + 14 + len("&uid=1") + len("&role=") = 32.
+    let mut forged = encrypted_profile_for("foo123@bar.com")?;
+    assert_eq!(forged.len(), 3 * BLOCK);
+
+    // Step 3: cut and paste the admin block over the "user" block.
+    forged.truncate(2 * BLOCK);
+    forged.extend_from_slice(admin_block);
+
+    let profile = decrypt_profile(&forged)?;
+    println!("Forged profile: {:?}", profile);
+    assert_eq!(profile["role"], "admin");
     Ok(())
 }
